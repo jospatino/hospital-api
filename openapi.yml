@@ -1,0 +1,280 @@
+# =========================================================
+# OpenAPI / Swagger contract
+# - Describes WHAT the API looks like (endpoints, DTOs, errors)
+# - Does NOT implement business logic
+# =========================================================
+openapi: 3.0.3
+
+# ---------------------------------------------------------
+# API metadata (for humans and tooling)
+# ---------------------------------------------------------
+info:
+  title: Hospital API
+  version: 1.0.0
+  description: >
+    REST API for managing doctors, patients, and appointment scheduling (no billing, no prescriptions).
+
+# ---------------------------------------------------------
+# Servers: where this API can be accessed
+# - You can list multiple environments (local, staging, prod)
+# - Swagger UI will let you switch between them
+# ---------------------------------------------------------
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  # - url: https://staging.example.com
+  #   description: Staging
+  # - url: https://api.example.com
+  #   description: Production
+
+# ---------------------------------------------------------
+# Tags: groups endpoints in Swagger UI (cosmetic + organization)
+# ---------------------------------------------------------
+tags:
+  - name: Appointments
+    description: Appointment scheduling operations
+
+# =========================================================
+# Paths: all endpoints of the API
+# =========================================================
+paths:
+
+  # -------------------------------------------------------
+  # POST /api/appointments
+  # Use case: Create an appointment (Slice 1)
+  # -------------------------------------------------------
+  /api/appointments:
+    post:
+      tags:
+        - Appointments
+
+      # operationId: stable unique identifier for this operation
+      # Useful for client SDK generation and references
+      operationId: createAppointment
+
+      summary: Create an appointment
+      description: |
+        Creates a new appointment with fixed duration.
+
+        Business rules:
+        - doctor and patient must exist and be active
+        - startAt must not be in the past
+        - no overlapping appointments for the same doctor (SCHEDULED only)
+        - a CREATED audit event is stored automatically
+
+      # ---------------------------------------------------
+      # Request body: what the client must send
+      # ---------------------------------------------------
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              # DTO contract (not a JPA entity)
+              $ref: '#/components/schemas/AppointmentCreateRequest'
+            examples:
+              validRequest:
+                summary: Valid request
+                value:
+                  doctorId: 123
+                  patientId: 456
+                  startAt: "2026-01-03T10:00:00"
+
+      # ---------------------------------------------------
+      # Responses: what the API can return
+      # ---------------------------------------------------
+      responses:
+
+        # ===== SUCCESS =====
+        '201':
+          description: Appointment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppointmentResponse'
+              examples:
+                created:
+                  summary: Appointment created successfully
+                  value:
+                    id: 999
+                    doctorId: 123
+                    patientId: 456
+                    startAt: "2026-01-03T10:00:00"
+                    endAt: "2026-01-03T10:30:00"
+                    status: "SCHEDULED"
+
+        # ===== CLIENT ERRORS =====
+
+        # Input validation error (missing fields, startAt in the past, invalid date format)
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                startAtPast:
+                  summary: startAt is in the past
+                  value:
+                    timestamp: "2026-01-02T22:00:00"
+                    status: 400
+                    error: "Bad Request"
+                    message: "startAt must not be in the past"
+                    path: "/api/appointments"
+
+        # Referenced resource does not exist (doctor or patient not found)
+        '404':
+          description: Doctor or Patient does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                doctorNotFound:
+                  summary: Doctor not found
+                  value:
+                    timestamp: "2026-01-02T22:00:00"
+                    status: 404
+                    error: "Not Found"
+                    message: "Doctor not found: 123"
+                    path: "/api/appointments"
+
+        # Business rule conflict (inactive doctor/patient OR overlapping appointment)
+        '409':
+          description: Business rule conflict (inactive or overlapping appointment)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                doctorInactive:
+                  summary: Doctor is inactive
+                  value:
+                    timestamp: "2026-01-02T22:00:00"
+                    status: 409
+                    error: "Conflict"
+                    message: "Doctor is inactive: 123"
+                    path: "/api/appointments"
+                overlap:
+                  summary: Overlapping appointment
+                  value:
+                    timestamp: "2026-01-02T22:00:00"
+                    status: 409
+                    error: "Conflict"
+                    message: "Doctor has an overlapping appointment"
+                    path: "/api/appointments"
+
+# =========================================================
+# Components: reusable DTOs / schemas (contracts)
+# =========================================================
+components:
+  schemas:
+
+    # -----------------------------------------------------
+    # AppointmentCreateRequest (input DTO)
+    # - Only what the client is allowed to provide
+    # -----------------------------------------------------
+    AppointmentCreateRequest:
+      type: object
+      additionalProperties: false  # Reject unknown fields (stricter contract)
+      required:
+        - doctorId
+        - patientId
+        - startAt
+      properties:
+        doctorId:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 123
+        patientId:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 456
+        startAt:
+          type: string
+          format: date-time
+          example: "2026-01-03T10:00:00"
+
+    # -----------------------------------------------------
+    # AppointmentResponse (output DTO)
+    # - What the server returns after creation
+    # -----------------------------------------------------
+    AppointmentResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - doctorId
+        - patientId
+        - startAt
+        - endAt
+        - status
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 999
+        doctorId:
+          type: integer
+          format: int64
+          example: 123
+        patientId:
+          type: integer
+          format: int64
+          example: 456
+        startAt:
+          type: string
+          format: date-time
+          example: "2026-01-03T10:00:00"
+        endAt:
+          type: string
+          format: date-time
+          example: "2026-01-03T10:30:00"
+        status:
+          $ref: '#/components/schemas/AppointmentStatus'
+
+    # -----------------------------------------------------
+    # AppointmentStatus (enum)
+    # - Current state of the appointment
+    # -----------------------------------------------------
+    AppointmentStatus:
+      type: string
+      enum:
+        - SCHEDULED
+        - CANCELLED
+        - COMPLETED
+      example: SCHEDULED
+
+    # -----------------------------------------------------
+    # ApiError (standard error response)
+    # - Reused for 4xx/5xx responses
+    # -----------------------------------------------------
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - timestamp
+        - status
+        - error
+        - message
+        - path
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-01-02T22:00:00"
+        status:
+          type: integer
+          format: int32
+          example: 409
+        error:
+          type: string
+          example: "Conflict"
+        message:
+          type: string
+          example: "Doctor has an overlapping appointment"
+        path:
+          type: string
+          example: "/api/appointments"

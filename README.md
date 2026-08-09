@@ -115,3 +115,9 @@ Final Notes
 
 This project prioritizes clarity of design over feature count.
 The goal is to show how a real-world backend system is thought through before being coded.
+
+## Development
+
+Project under active development
+
+

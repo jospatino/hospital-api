@@ -120,4 +120,7 @@ The goal is to show how a real-world backend system is thought through before be
 
 Project under active development
 
+## Contributing 
+
+Changes should be developed in feature branches and reviewsws through pull requests
 

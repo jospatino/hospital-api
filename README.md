@@ -122,5 +122,5 @@ Project under active development
 
 ## Contributing 
 
-Changes should be developed in feature branches and reviewsws through pull requests
+Changes should be developed in feature branches and reviewsws through pull requests, v2
 

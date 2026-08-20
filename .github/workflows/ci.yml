@@ -7,7 +7,8 @@ on:
     branches: [ main ]
 
 jobs:
-  build-and-test:
+
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -27,11 +28,20 @@ jobs:
       - name: Build application
         run: mvn package -DskipTests
 
-      - name: Build Docker image
-        run: docker build -t hospital-app:ci .
-
       - name: Upload JAR artifact
         uses: actions/upload-artifact@v6
         with:
           name: hospital-api-jar
           path: target/*.jar
+
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Build Docker image
+        run: docker build -t hospital-app:ci .
